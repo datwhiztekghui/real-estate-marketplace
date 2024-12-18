@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi";
+import { useWriteContract, useWaitForTransactionReceipt, usePublicClient } from "wagmi";
 import { useState } from "react";
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../constants";
 import { parseEther } from "viem";
@@ -9,7 +9,12 @@ export const Route = createFileRoute('/list-property')({
 });
 
 function ListProperty() {
+  const publicClient = usePublicClient();
+  if (!publicClient) {
+    throw new Error("Public client is not available");
+  }
   // Form state
+  const [error, setError] = useState<string | null>(null);
   const [propertyDetails, setPropertyDetails] = useState({
     name: "",
     physicalAddress: "",
@@ -27,12 +32,7 @@ function ListProperty() {
   });
 
   // Contract interactions
-  const { writeContract, data: hash, error } = useWriteContract();
-  const { data: propertyCounter } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: CONTRACT_ABI,
-    functionName: 'propertyCounter',
-  });
+  const { writeContract, data: hash } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = 
     useWaitForTransactionReceipt({ hash });
 
@@ -55,7 +55,7 @@ function ListProperty() {
       }
 
       // First transaction - list property
-      const tx = await writeContract({
+      await writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
         abi: CONTRACT_ABI,
         functionName: 'listProperty',
@@ -70,17 +70,27 @@ function ListProperty() {
         ]
       });
 
+      if (!hash) throw new Error("No transaction hash received");
+      
       // Wait for the transaction to be mined
-      await tx.wait();
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      console.log("First transaction receipt:", receipt);
+
+      // Get the property ID from the event
+      const propertyId = receipt?.logs[0]?.topics[1];
+      if (!propertyId) {
+        throw new Error("Failed to get property ID from transaction");
+      }
 
       // Second transaction - set property details
-      if (hash) {
+      if (propertyId) {
+        console.log("Setting details for property ID:", propertyId);
         await writeContract({
-          address: CONTRACT_ADDRESS,
+          address: CONTRACT_ADDRESS as `0x${string}`,
           abi: CONTRACT_ABI,
           functionName: 'setPropertyDetails',
           args: [
-            BigInt(propertyCounter + 1), // Use the next property ID instead of hash
+            BigInt(parseInt(propertyId, 16)), // Convert hex to decimal
             propertyDetails.name,
             propertyDetails.physicalAddress,
             propertyDetails.residenceType,
@@ -93,7 +103,8 @@ function ListProperty() {
       }
     } catch (err) {
       console.error("Error listing property:", err instanceof Error ? err.message : String(err));
-      throw err;
+      setError(err instanceof Error ? err.message : String(err));
+      return;
     }
   };
 
@@ -289,7 +300,7 @@ function ListProperty() {
 
             {error && (
               <div className="text-red-500 mt-4">
-                Error: {error.message}
+                Error: {error}
               </div>
             )}
 

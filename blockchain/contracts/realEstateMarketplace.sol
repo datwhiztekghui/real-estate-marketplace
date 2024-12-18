@@ -54,10 +54,10 @@ contract RealEstateMarketplace is Ownable, ReentrancyGuard {
 
     // Events
     event PropertyListed(
-        uint256 indexed propertyId, 
-        address indexed owner, 
-        uint256 price, 
-        bool forSale, 
+        uint256 indexed propertyId,
+        address indexed owner,
+        uint256 price,
+        bool forSale,
         bool forRent
     );
 
