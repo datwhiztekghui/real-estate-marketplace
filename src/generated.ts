@@ -304,7 +304,7 @@ export const realEstateMarketplaceAbi = [
     ],
     name: 'listProperty',
     outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'nonpayable',
+    stateMutability: 'payable',
   },
   {
     type: 'function',

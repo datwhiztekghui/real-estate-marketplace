@@ -154,7 +154,9 @@ contract RealEstateMarketplace is Ownable, ReentrancyGuard {
         uint256 _rentAmount,
         uint256 _rentDuration,
         bool _acceptingBids
-    ) external returns (uint256) {
+    ) external payable returns (uint256) {
+        require(_price > 0 && _price < type(uint256).max, "Invalid price value");
+        
         propertyCounter++;
 
         properties[propertyCounter].listing = PropertyListing({

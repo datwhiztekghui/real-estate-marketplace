@@ -11,11 +11,18 @@
 // Import Routes
 
 import { Route as rootRoute } from './routes/__root'
+import { Route as ListPropertyImport } from './routes/list-property'
 import { Route as ConnectWalletImport } from './routes/connect-wallet'
 import { Route as IndexImport } from './routes/index'
 import { Route as PropertyIdImport } from './routes/property.$id'
 
 // Create/Update Routes
+
+const ListPropertyRoute = ListPropertyImport.update({
+  id: '/list-property',
+  path: '/list-property',
+  getParentRoute: () => rootRoute,
+} as any)
 
 const ConnectWalletRoute = ConnectWalletImport.update({
   id: '/connect-wallet',
@@ -53,6 +60,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConnectWalletImport
       parentRoute: typeof rootRoute
     }
+    '/list-property': {
+      id: '/list-property'
+      path: '/list-property'
+      fullPath: '/list-property'
+      preLoaderRoute: typeof ListPropertyImport
+      parentRoute: typeof rootRoute
+    }
     '/property/$id': {
       id: '/property/$id'
       path: '/property/$id'
@@ -68,12 +82,14 @@ declare module '@tanstack/react-router' {
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/connect-wallet': typeof ConnectWalletRoute
+  '/list-property': typeof ListPropertyRoute
   '/property/$id': typeof PropertyIdRoute
 }
 
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/connect-wallet': typeof ConnectWalletRoute
+  '/list-property': typeof ListPropertyRoute
   '/property/$id': typeof PropertyIdRoute
 }
 
@@ -81,27 +97,30 @@ export interface FileRoutesById {
   __root__: typeof rootRoute
   '/': typeof IndexRoute
   '/connect-wallet': typeof ConnectWalletRoute
+  '/list-property': typeof ListPropertyRoute
   '/property/$id': typeof PropertyIdRoute
 }
 
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/connect-wallet' | '/property/$id'
+  fullPaths: '/' | '/connect-wallet' | '/list-property' | '/property/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/connect-wallet' | '/property/$id'
-  id: '__root__' | '/' | '/connect-wallet' | '/property/$id'
+  to: '/' | '/connect-wallet' | '/list-property' | '/property/$id'
+  id: '__root__' | '/' | '/connect-wallet' | '/list-property' | '/property/$id'
   fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ConnectWalletRoute: typeof ConnectWalletRoute
+  ListPropertyRoute: typeof ListPropertyRoute
   PropertyIdRoute: typeof PropertyIdRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ConnectWalletRoute: ConnectWalletRoute,
+  ListPropertyRoute: ListPropertyRoute,
   PropertyIdRoute: PropertyIdRoute,
 }
 
@@ -117,6 +136,7 @@ export const routeTree = rootRoute
       "children": [
         "/",
         "/connect-wallet",
+        "/list-property",
         "/property/$id"
       ]
     },
@@ -125,6 +145,9 @@ export const routeTree = rootRoute
     },
     "/connect-wallet": {
       "filePath": "connect-wallet.tsx"
+    },
+    "/list-property": {
+      "filePath": "list-property.tsx"
     },
     "/property/$id": {
       "filePath": "property.$id.tsx"

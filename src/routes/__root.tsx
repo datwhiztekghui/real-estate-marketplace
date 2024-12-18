@@ -8,7 +8,6 @@ import { formatAddress } from "@/utils/format";
 import React, { Suspense, useState } from "react";
 import { useAccount, useDisconnect } from "wagmi";
 import { Button } from "@/components/ui/button";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 // import Navbar from "../components/Navbar";
 
 
@@ -46,6 +45,7 @@ const TanStackRouterDevtools =
 function RootComponent() {
   const { address } = useAccount();
   const { disconnect } = useDisconnect();
+  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   
   return (
     <>
@@ -55,41 +55,52 @@ function RootComponent() {
           PROPSTAKE
         </h1>
         <nav className="flex gap-4 text-lg items-center">
-
+          <Link
+            to="/list-property"
+            className="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+          >
+            List Property
+          </Link>
         </nav>
         
         {/* <Navbar /> */}
         {address ? (
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
-              <Button
-                className="bg-propstakeIndigoHover hover:bg-indigo-600 text-white-100 p-3 border-[1px] hover:btn-hover flex justify-between gap-2 rounded-[10px]"
-              >
-                {formatAddress(address!)}
-              </Button>
-            </DropdownMenu.Trigger>
+          <>
+            <Button
+              className="bg-propstakeIndigoHover hover:bg-indigo-600 text-white-100 p-3 border-[1px] hover:btn-hover flex justify-between gap-2 rounded-[10px]"
+              onClick={() => setShowDisconnectModal(true)}
+            >
+              {formatAddress(address!)}
+            </Button>
 
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content
-                className="min-w-[200px] bg-gray-900 rounded-xl p-2 shadow-xl"
-                sideOffset={5}
-              >
-                <DropdownMenu.Item
-                  className="flex cursor-pointer items-center px-4 py-3 text-white hover:bg-gray-800 rounded-lg outline-none"
-                  onClick={() => navigator.clipboard.writeText(address)}
-                >
-                  Copy Address
-                </DropdownMenu.Item>
-                
-                <DropdownMenu.Item
-                  className="flex cursor-pointer items-center px-4 py-3 text-red-500 hover:bg-gray-800 rounded-lg outline-none"
-                  onClick={() => disconnect()}
-                >
-                  Disconnect {formatAddress(address)}
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
+            <Dialog open={showDisconnectModal} onOpenChange={setShowDisconnectModal}>
+              <DialogContent className="sm:max-w-[400px] bg-gray-900 rounded-2xl border-0 shadow-2xl">
+                <div className="p-6">
+                  <h3 className="text-xl font-semibold mb-4">Wallet Options</h3>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(address);
+                        setShowDisconnectModal(false);
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      Copy Address
+                    </button>
+                    <button
+                      onClick={() => {
+                        disconnect();
+                        setShowDisconnectModal(false);
+                      }}
+                      className="w-full px-4 py-3 text-left text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      Disconnect {formatAddress(address)}
+                    </button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </>
         ) : (
           <Dialog>
             <DialogTrigger asChild>
