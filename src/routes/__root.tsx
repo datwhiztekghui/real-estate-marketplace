@@ -5,9 +5,10 @@ import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { WalletOptions } from "@/components/wallet-options";
 import { formatAddress } from "@/utils/format";
 
-import React, { Suspense } from "react";
+import React, { Suspense, useState } from "react";
 import { useAccount, useDisconnect } from "wagmi";
 import { Button } from "@/components/ui/button";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 // import Navbar from "../components/Navbar";
 
 
@@ -59,12 +60,36 @@ function RootComponent() {
         
         {/* <Navbar /> */}
         {address ? (
-          <Button
-           className="bg-propstakeIndigoHover  hover:bg-indigo-600  text-white-100 p-3 border-[1px] hover:btn-hover flex justify-between gap-2 rounded-[10px]"
-            onClick={() => disconnect()}
-          >
-            Disconnect {formatAddress(address!)}
-          </Button>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <Button
+                className="bg-propstakeIndigoHover hover:bg-indigo-600 text-white-100 p-3 border-[1px] hover:btn-hover flex justify-between gap-2 rounded-[10px]"
+              >
+                {formatAddress(address!)}
+              </Button>
+            </DropdownMenu.Trigger>
+
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                className="min-w-[200px] bg-gray-900 rounded-xl p-2 shadow-xl"
+                sideOffset={5}
+              >
+                <DropdownMenu.Item
+                  className="flex cursor-pointer items-center px-4 py-3 text-white hover:bg-gray-800 rounded-lg outline-none"
+                  onClick={() => navigator.clipboard.writeText(address)}
+                >
+                  Copy Address
+                </DropdownMenu.Item>
+                
+                <DropdownMenu.Item
+                  className="flex cursor-pointer items-center px-4 py-3 text-red-500 hover:bg-gray-800 rounded-lg outline-none"
+                  onClick={() => disconnect()}
+                >
+                  Disconnect {formatAddress(address)}
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         ) : (
           <Dialog>
             <DialogTrigger asChild>
