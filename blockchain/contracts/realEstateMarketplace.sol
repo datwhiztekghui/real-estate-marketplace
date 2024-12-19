@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -17,21 +17,24 @@ contract RealEstateMarketplace is Ownable, ReentrancyGuard {
         uint8 bedrooms;
         uint8 bathrooms;
         uint256 squareFeet;
-        uint16 yearBuilt;
+        uint256 yearBuilt;
+        string[] keyFeatures;
+        string[] amenities;
+        string description;
     }
 
     struct PropertyListing {
         address owner;
         uint256 price;
-        uint256 rentAmount;
-        uint256 rentDuration;
         bool forSale;
         bool forRent;
+        uint256 rentAmount;
+        uint256 rentDuration;
+        bool acceptingBids;
         bool isInspected;
         uint8 inspectionRating;
         bool isSold;
         bool isRented;
-        bool acceptingBids;
     }
 
     struct Property {
@@ -148,14 +151,21 @@ contract RealEstateMarketplace is Ownable, ReentrancyGuard {
 
     // List property with separate function for details
     function listProperty(
-        uint256 _price, 
-        bool _forSale, 
-        bool _forRent, 
+        uint256 _price,
+        bool _forSale,
+        bool _forRent,
         uint256 _rentAmount,
         uint256 _rentDuration,
         bool _acceptingBids
-    ) external payable returns (uint256) {
-        require(_price > 0 && _price < type(uint256).max, "Invalid price value");
+    ) external returns (uint256) {
+        require(_forSale || _forRent, "Property must be either for sale or rent");
+        if (_forSale) {
+            require(_price > 0, "Sale price must be greater than 0");
+        }
+        if (_forRent) {
+            require(_rentAmount > 0, "Rent amount must be greater than 0");
+            require(_rentDuration > 0, "Rent duration must be greater than 0");
+        }
         
         propertyCounter++;
 
@@ -166,18 +176,18 @@ contract RealEstateMarketplace is Ownable, ReentrancyGuard {
             forRent: _forRent,
             rentAmount: _rentAmount,
             rentDuration: _rentDuration,
+            acceptingBids: _acceptingBids,
             isInspected: false,
             inspectionRating: 0,
             isSold: false,
-            isRented: false,
-            acceptingBids: _acceptingBids
+            isRented: false
         });
 
         emit PropertyListed(
-            propertyCounter, 
-            msg.sender, 
-            _price, 
-            _forSale, 
+            propertyCounter,
+            msg.sender,
+            _price,
+            _forSale,
             _forRent
         );
 
@@ -193,21 +203,25 @@ contract RealEstateMarketplace is Ownable, ReentrancyGuard {
         uint8 _bedrooms,
         uint8 _bathrooms,
         uint256 _squareFeet,
-        uint16 _yearBuilt
+        uint256 _yearBuilt,
+        string[] memory _keyFeatures,
+        string[] memory _amenities,
+        string memory _description
     ) external {
-        Property storage property = properties[_propertyId];
-        
-        // Ensure only the property owner can set details
-        require(property.listing.owner == msg.sender, "Only property owner can set details");
-        
-        property.details = PropertyDetails({
+        require(_propertyId <= propertyCounter, "Property does not exist");
+        require(properties[_propertyId].listing.owner == msg.sender, "Not the owner");
+
+        properties[_propertyId].details = PropertyDetails({
             name: _name,
             physicalAddress: _physicalAddress,
             residenceType: _residenceType,
             bedrooms: _bedrooms,
             bathrooms: _bathrooms,
             squareFeet: _squareFeet,
-            yearBuilt: _yearBuilt
+            yearBuilt: _yearBuilt,
+            keyFeatures: _keyFeatures,
+            amenities: _amenities,
+            description: _description
         });
 
         emit PropertyDetailsUpdated(_propertyId);
@@ -352,5 +366,20 @@ contract RealEstateMarketplace is Ownable, ReentrancyGuard {
             inspector.successfulInspections, 
             inspector.totalInspections
         );
+    }
+
+    function getAllProperties() public view returns (
+        PropertyListing[] memory listings,
+        PropertyDetails[] memory details
+    ) {
+        PropertyListing[] memory allListings = new PropertyListing[](propertyCounter);
+        PropertyDetails[] memory allDetails = new PropertyDetails[](propertyCounter);
+
+        for (uint256 i = 1; i <= propertyCounter; i++) {
+            allListings[i-1] = properties[i].listing;
+            allDetails[i-1] = properties[i].details;
+        }
+
+        return (allListings, allDetails);
     }
 }

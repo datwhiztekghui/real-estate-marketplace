@@ -2,15 +2,13 @@ import React from 'react';
 import { Link } from '@tanstack/react-router';
 import { useReadContract } from 'wagmi';
 import { PropertyDetails, PropertyListing } from '../types';
-import { realEstateMarketplaceAbi } from '@/generated';
-import { ConnectWallet } from '@/components/connect-wallet';
+import { ConnectWallet } from '@/components/connect-wallet'; 
 import { ModeToggle } from '@/components/mode-toggle';
 import { readContract } from '@wagmi/core'
 import { config } from '@/lib/wagmi'
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../constants';
 
 
-const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
-const CONTRACT_ABI = realEstateMarketplaceAbi;
 
 const PropertyListPage: React.FC = () => {
   const [properties, setProperties] = React.useState<
@@ -61,34 +59,46 @@ const PropertyListPage: React.FC = () => {
           <Link
             key={property.id}
             to={`/property/${property.id}`}
-            className="bg-white shadow-md rounded-lg overflow-hidden"
+            className="bg-gray-900 shadow-xl rounded-xl overflow-hidden hover:shadow-2xl transition-shadow"
           >
             <img
-              src="/placeholder.jpg"
+              src={getPropertyImage(property.details.residenceType)}
               alt={property.details.name}
-              className="w-full h-48 object-cover"
+              className="w-full h-64 object-cover"
             />
-            <div className="p-4">
-              <h3 className="text-lg font-bold">{property.details.name}</h3>
-              <p className="text-gray-600">{property.details.physicalAddress}</p>
-              <p className="text-gray-600">{property.details.residenceType}</p>
-              <div className="flex justify-between mt-4">
-                <p>
-                  {property.details.bedrooms} bedrooms, {property.details.squareFeet.toString()} sq ft, {property.details.yearBuilt} built
-                </p>
-                <p className="font-bold">${property.listing.price.toString()}</p>
+            <div className="p-6">
+              <div className="mb-4">
+                <h3 className="text-xl font-bold text-white">{property.details.name}</h3>
+                <p className="text-gray-400">{property.details.physicalAddress}</p>
               </div>
-              <div className="flex justify-between mt-2">
-                {property.listing.forSale && (
-                  <span className="bg-green-500 text-white px-2 py-1 rounded">
-                    For Sale
-                  </span>
-                )}
-                {property.listing.forRent && (
-                  <span className="bg-blue-500 text-white px-2 py-1 rounded">
-                    For Rent
-                  </span>
-                )}
+              
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <span className="text-gray-400">Bedrooms:</span>
+                  <span className="text-white ml-2">{property.details.bedrooms}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400">Area:</span>
+                  <span className="text-white ml-2">{property.details.squareFeet.toString()} sq ft</span>
+                </div>
+                <div>
+                  <span className="text-gray-400">Type:</span>
+                  <span className="text-white ml-2">{property.details.residenceType}</span>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-gray-400">Price</p>
+                  <p className="text-xl font-bold text-white">
+                    {property.listing.forSale 
+                      ? `${formatEther(property.listing.price)} ETH`
+                      : `${formatEther(property.listing.rentAmount)} ETH/month`}
+                  </p>
+                </div>
+                <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors">
+                  View Details
+                </button>
               </div>
             </div>
           </Link>

@@ -22,7 +22,7 @@ const SUPPORTED_WALLETS = [
   {
     id: "walletconnect",
     name: "WalletConnect",
-    connector: () => walletConnect(),
+    connector: () => walletConnect({ projectId: 'YOUR_PROJECT_ID' }),
     icon: "🔗"
   },
   {

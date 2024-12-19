@@ -4,7 +4,6 @@ import type { QueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { WalletOptions } from "@/components/wallet-options";
 import { formatAddress } from "@/utils/format";
-
 import React, { Suspense, useState } from "react";
 import { useAccount, useDisconnect } from "wagmi";
 import { Button } from "@/components/ui/button";

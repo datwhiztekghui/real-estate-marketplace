@@ -3,19 +3,24 @@ export interface PropertyDetails {
   physicalAddress: string;
   residenceType: string;
   bedrooms: number;
+  bathrooms: number;
   squareFeet: bigint;
-  yearBuilt: number;
+  yearBuilt: bigint;
+  keyFeatures: readonly string[];
+  amenities: readonly string[];
+  description: string;
 }
 
 export interface PropertyListing {
-  owner: string;
+  owner: `0x${string}`;
   price: bigint;
-  rentAmount: bigint;
-  rentDuration: bigint;
   forSale: boolean;
   forRent: boolean;
+  rentAmount: bigint;
+  rentDuration: bigint;
+  acceptingBids: boolean;
   isInspected: boolean;
+  inspectionRating: number;
   isSold: boolean;
   isRented: boolean;
-  acceptingBids: boolean;
 } 

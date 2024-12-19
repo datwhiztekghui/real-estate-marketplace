@@ -4,6 +4,8 @@ import { useState } from "react";
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../constants";
 import { parseEther } from "viem";
 
+console.log("Contract ABI:", CONTRACT_ABI);
+
 export const Route = createFileRoute('/list-property')({
   component: ListProperty
 });
@@ -19,16 +21,19 @@ function ListProperty() {
     name: "",
     physicalAddress: "",
     residenceType: "",
-    bedrooms: 0,
-    bathrooms: 0,
-    squareFeet: 0,
-    yearBuilt: new Date().getFullYear(),
+    bedrooms: "",
+    bathrooms: "",
+    squareFeet: "",
+    yearBuilt: BigInt(new Date().getFullYear()),
     price: "",
     rentAmount: "",
     rentDuration: "",
     forSale: true,
     forRent: false,
-    acceptingBids: false
+    acceptingBids: false,
+    keyFeatures: [""],
+    amenities: [""],
+    description: ""
   });
 
   // Contract interactions
@@ -38,42 +43,69 @@ function ListProperty() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Debug logs
-    console.log("Property Details:", propertyDetails);
-    if (!propertyDetails.price || isNaN(Number(propertyDetails.price))) {
-      console.error("Invalid price value");
-      return;
-    }
-
-    const priceInWei = parseEther(propertyDetails.price);
-    console.log("Price in Wei:", priceInWei.toString());
-
+    
     try {
       if (!propertyDetails.forSale && !propertyDetails.forRent) {
         throw new Error("Property must be either for sale or rent");
       }
 
+      // Validate required fields based on listing type
+      if (propertyDetails.forSale && !propertyDetails.price) {
+        throw new Error("Sale price is required");
+      }
+      if (propertyDetails.forRent && (!propertyDetails.rentAmount || !propertyDetails.rentDuration)) {
+        throw new Error("Rent amount and duration are required");
+      }
+
+      console.log("Listing property with args:", {
+        price: propertyDetails.forSale ? parseEther(propertyDetails.price) : 0n,
+        forSale: propertyDetails.forSale,
+        forRent: propertyDetails.forRent,
+        rentAmount: propertyDetails.forRent ? parseEther(propertyDetails.rentAmount) : 0n,
+        rentDuration: propertyDetails.forRent ? BigInt(propertyDetails.rentDuration) : 0n,
+        acceptingBids: propertyDetails.acceptingBids
+      });
+
+      // Add this before the writeContract call
+      if (propertyDetails.forSale) {
+        if (!propertyDetails.price || parseFloat(propertyDetails.price) <= 0) {
+          throw new Error("Sale price must be greater than 0");
+        }
+      }
+
+      if (propertyDetails.forRent) {
+        if (!propertyDetails.rentAmount || parseFloat(propertyDetails.rentAmount) <= 0) {
+          throw new Error("Rent amount must be greater than 0");
+        }
+        if (!propertyDetails.rentDuration || parseInt(propertyDetails.rentDuration) <= 0) {
+          throw new Error("Rent duration must be greater than 0");
+        }
+      }
+
+      console.log("Contract address:", CONTRACT_ADDRESS);
+      console.log("Function signature:", CONTRACT_ABI.find(x => 'name' in x && x.name === 'listProperty'));
+
       // First transaction - list property
+      if (!CONTRACT_ADDRESS) throw new Error("Contract address not found");
+
       await writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
         abi: CONTRACT_ABI,
         functionName: 'listProperty',
-        value: 0n,
         args: [
-          BigInt(priceInWei),
+          propertyDetails.forSale ? parseEther(propertyDetails.price) : 0n,
           propertyDetails.forSale,
           propertyDetails.forRent,
-          0n,
-          0n,
+          propertyDetails.forRent ? parseEther(propertyDetails.rentAmount) : 0n,
+          propertyDetails.forRent ? BigInt(propertyDetails.rentDuration) : 0n,
           propertyDetails.acceptingBids
         ]
       });
 
-      if (!hash) throw new Error("No transaction hash received");
-      
-      // Wait for the transaction to be mined
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      const receipt = await publicClient.waitForTransactionReceipt({ 
+        hash: hash as `0x${string}` 
+      });
+
       console.log("First transaction receipt:", receipt);
 
       // Get the property ID from the event
@@ -82,29 +114,29 @@ function ListProperty() {
         throw new Error("Failed to get property ID from transaction");
       }
 
+      console.log("Setting property details with args:", {
+        propertyId: BigInt(parseInt(propertyId, 16)),
+        name: propertyDetails.name,
+        physicalAddress: propertyDetails.physicalAddress,
+        residenceType: propertyDetails.residenceType,
+        bedrooms: Number(propertyDetails.bedrooms),
+        bathrooms: Number(propertyDetails.bathrooms),
+        squareFeet: BigInt(propertyDetails.squareFeet),
+        yearBuilt: propertyDetails.yearBuilt,
+        keyFeatures: propertyDetails.keyFeatures.filter(f => f.trim() !== ""),
+        amenities: propertyDetails.amenities.filter(a => a.trim() !== ""),
+        description: propertyDetails.description
+      });
+
       // Second transaction - set property details
-      if (propertyId) {
-        console.log("Setting details for property ID:", propertyId);
-        await writeContract({
-          address: CONTRACT_ADDRESS as `0x${string}`,
-          abi: CONTRACT_ABI,
-          functionName: 'setPropertyDetails',
-          args: [
-            BigInt(parseInt(propertyId, 16)), // Convert hex to decimal
-            propertyDetails.name,
-            propertyDetails.physicalAddress,
-            propertyDetails.residenceType,
-            propertyDetails.bedrooms,
-            propertyDetails.bathrooms,
-            BigInt(propertyDetails.squareFeet),
-            propertyDetails.yearBuilt
-          ]
-        });
-      }
+      const detailsReceipt = await publicClient.waitForTransactionReceipt({ 
+        hash: hash as `0x${string}` 
+      });
+      console.log("Second transaction receipt:", detailsReceipt);
+
     } catch (err) {
-      console.error("Error listing property:", err instanceof Error ? err.message : String(err));
+      console.error("Error listing property:", err);
       setError(err instanceof Error ? err.message : String(err));
-      return;
     }
   };
 
@@ -171,7 +203,7 @@ function ListProperty() {
                     type="number"
                     className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
                     value={propertyDetails.bedrooms}
-                    onChange={(e) => setPropertyDetails(prev => ({...prev, bedrooms: parseInt(e.target.value)}))}
+                    onChange={(e) => setPropertyDetails(prev => ({...prev, bedrooms: e.target.value}))}
                     required
                   />
                 </div>
@@ -182,7 +214,7 @@ function ListProperty() {
                     type="number"
                     className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
                     value={propertyDetails.bathrooms}
-                    onChange={(e) => setPropertyDetails(prev => ({...prev, bathrooms: parseInt(e.target.value)}))}
+                    onChange={(e) => setPropertyDetails(prev => ({...prev, bathrooms: e.target.value}))}
                     required
                   />
                 </div>
@@ -193,7 +225,7 @@ function ListProperty() {
                     type="number"
                     className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
                     value={propertyDetails.squareFeet}
-                    onChange={(e) => setPropertyDetails(prev => ({...prev, squareFeet: parseInt(e.target.value)}))}
+                    onChange={(e) => setPropertyDetails(prev => ({...prev, squareFeet: e.target.value || ""}))}
                     required
                   />
                 </div>
@@ -203,12 +235,115 @@ function ListProperty() {
                   <input
                     type="number"
                     className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
-                    value={propertyDetails.yearBuilt}
-                    onChange={(e) => setPropertyDetails(prev => ({...prev, yearBuilt: parseInt(e.target.value)}))}
+                    value={Number(propertyDetails.yearBuilt)}
+                    onChange={(e) => setPropertyDetails(prev => ({
+                      ...prev, 
+                      yearBuilt: BigInt(e.target.value)
+                    }))}
                     required
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Property Description */}
+            <div className="bg-gray-800/50 p-6 rounded-xl space-y-6">
+              <h2 className="text-2xl font-semibold mb-4">Property Description</h2>
+              <div>
+                <label className="block text-sm font-medium mb-2">Description</label>
+                <textarea
+                  className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
+                  rows={4}
+                  value={propertyDetails.description}
+                  onChange={(e) => setPropertyDetails(prev => ({...prev, description: e.target.value}))}
+                  required
+                  placeholder="Describe your property..."
+                />
+              </div>
+            </div>
+
+            {/* Key Features */}
+            <div className="bg-gray-800/50 p-6 rounded-xl space-y-6">
+              <h2 className="text-2xl font-semibold mb-4">Key Features</h2>
+              {propertyDetails.keyFeatures.map((feature, index) => (
+                <div key={index} className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
+                    value={feature}
+                    onChange={(e) => {
+                      const newFeatures = [...propertyDetails.keyFeatures];
+                      newFeatures[index] = e.target.value;
+                      setPropertyDetails(prev => ({...prev, keyFeatures: newFeatures}));
+                    }}
+                    placeholder="e.g., Swimming Pool, Garden, etc."
+                  />
+                  {propertyDetails.keyFeatures.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newFeatures = propertyDetails.keyFeatures.filter((_, i) => i !== index);
+                        setPropertyDetails(prev => ({...prev, keyFeatures: newFeatures}));
+                      }}
+                      className="bg-red-500/20 hover:bg-red-500/30 text-red-500 p-2 rounded-lg transition-colors"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setPropertyDetails(prev => ({
+                  ...prev,
+                  keyFeatures: [...prev.keyFeatures, ""]
+                }))}
+                className="bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-500 px-4 py-2 rounded-lg transition-colors"
+              >
+                Add Feature
+              </button>
+            </div>
+
+            {/* Amenities */}
+            <div className="bg-gray-800/50 p-6 rounded-xl space-y-6">
+              <h2 className="text-2xl font-semibold mb-4">Amenities</h2>
+              {propertyDetails.amenities.map((amenity, index) => (
+                <div key={index} className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
+                    value={amenity}
+                    onChange={(e) => {
+                      const newAmenities = [...propertyDetails.amenities];
+                      newAmenities[index] = e.target.value;
+                      setPropertyDetails(prev => ({...prev, amenities: newAmenities}));
+                    }}
+                    placeholder="e.g., Air Conditioning, Parking, etc."
+                  />
+                  {propertyDetails.amenities.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newAmenities = propertyDetails.amenities.filter((_, i) => i !== index);
+                        setPropertyDetails(prev => ({...prev, amenities: newAmenities}));
+                      }}
+                      className="bg-red-500/20 hover:bg-red-500/30 text-red-500 p-2 rounded-lg transition-colors"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setPropertyDetails(prev => ({
+                  ...prev,
+                  amenities: [...prev.amenities, ""]
+                }))}
+                className="bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-500 px-4 py-2 rounded-lg transition-colors"
+              >
+                Add Amenity
+              </button>
             </div>
 
             {/* Listing Details */}
