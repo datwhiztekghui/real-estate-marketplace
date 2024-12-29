@@ -1,452 +1,418 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useWriteContract, useWaitForTransactionReceipt, usePublicClient } from "wagmi";
-import { useState } from "react";
-import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../constants";
-import { parseEther } from "viem";
+import { useState, useEffect } from 'react';
+import { useAccount, useWriteContract, usePublicClient } from 'wagmi';
+import { parseEther } from 'viem';
+import { useQueryClient } from '@tanstack/react-query';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../constants';
+import { keccak256, toBytes } from 'viem';
 
-console.log("Contract ABI:", CONTRACT_ABI);
-
+// Export the Route for TanStack Router
 export const Route = createFileRoute('/list-property')({
   component: ListProperty
 });
 
+// Rename the default export to match the component name
 function ListProperty() {
+  const { address } = useAccount();
+  const queryClient = useQueryClient();
+  const { writeContractAsync: listProperty } = useWriteContract();
+  const { writeContractAsync: setPropertyDetails } = useWriteContract();
   const publicClient = usePublicClient();
-  if (!publicClient) {
-    throw new Error("Public client is not available");
-  }
-  // Form state
-  const [error, setError] = useState<string | null>(null);
-  const [propertyDetails, setPropertyDetails] = useState({
-    name: "",
-    physicalAddress: "",
-    residenceType: "",
-    bedrooms: "",
-    bathrooms: "",
-    squareFeet: "",
-    yearBuilt: BigInt(new Date().getFullYear()),
-    price: "",
-    rentAmount: "",
-    rentDuration: "",
+  if (!publicClient) throw new Error("Public client not available");
+  
+  // Form states for listing
+  const [listingForm, setListingForm] = useState({
+    price: '',
     forSale: true,
     forRent: false,
-    acceptingBids: false,
-    keyFeatures: [""],
-    amenities: [""],
-    description: ""
+    rentAmount: '',
+    rentDuration: '',
+    acceptingBids: true
   });
 
-  // Contract interactions
-  const { writeContract, data: hash } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = 
-    useWaitForTransactionReceipt({ hash });
+  // Form states for property details
+  const [detailsForm, setDetailsForm] = useState({
+    name: '',
+    physicalAddress: '',
+    residenceType: '',
+    bedrooms: '',
+    bathrooms: '',
+    squareFeet: '',
+    yearBuilt: '',
+    keyFeatures: '',
+    amenities: '',
+    description: ''
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Transaction states
+  const [propertyId, setPropertyId] = useState<number | null>(null);
+  
+  // Handle listing form changes
+  const handleListingChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type } = e.target;
+    setListingForm(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
+    }));
+  };
+
+  // Handle details form changes
+  const handleDetailsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setDetailsForm(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }));
+  };
+
+  // Submit handler for listing property
+  const handleListProperty = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    if (!address) return;
+
     try {
-      if (!propertyDetails.forSale && !propertyDetails.forRent) {
-        throw new Error("Property must be either for sale or rent");
-      }
-
-      // Validate required fields based on listing type
-      if (propertyDetails.forSale && !propertyDetails.price) {
-        throw new Error("Sale price is required");
-      }
-      if (propertyDetails.forRent && (!propertyDetails.rentAmount || !propertyDetails.rentDuration)) {
-        throw new Error("Rent amount and duration are required");
-      }
-
-      console.log("Listing property with args:", {
-        price: propertyDetails.forSale ? parseEther(propertyDetails.price) : 0n,
-        forSale: propertyDetails.forSale,
-        forRent: propertyDetails.forRent,
-        rentAmount: propertyDetails.forRent ? parseEther(propertyDetails.rentAmount) : 0n,
-        rentDuration: propertyDetails.forRent ? BigInt(propertyDetails.rentDuration) : 0n,
-        acceptingBids: propertyDetails.acceptingBids
-      });
-
-      // Add this before the writeContract call
-      if (propertyDetails.forSale) {
-        if (!propertyDetails.price || parseFloat(propertyDetails.price) <= 0) {
-          throw new Error("Sale price must be greater than 0");
-        }
-      }
-
-      if (propertyDetails.forRent) {
-        if (!propertyDetails.rentAmount || parseFloat(propertyDetails.rentAmount) <= 0) {
-          throw new Error("Rent amount must be greater than 0");
-        }
-        if (!propertyDetails.rentDuration || parseInt(propertyDetails.rentDuration) <= 0) {
-          throw new Error("Rent duration must be greater than 0");
-        }
-      }
-
-      console.log("Contract address:", CONTRACT_ADDRESS);
-      console.log("Function signature:", CONTRACT_ABI.find(x => 'name' in x && x.name === 'listProperty'));
-
-      // First transaction - list property
-      if (!CONTRACT_ADDRESS) throw new Error("Contract address not found");
-
-      await writeContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
+      const hash = await listProperty({
+        address: CONTRACT_ADDRESS,
         abi: CONTRACT_ABI,
         functionName: 'listProperty',
         args: [
-          propertyDetails.forSale ? parseEther(propertyDetails.price) : 0n,
-          propertyDetails.forSale,
-          propertyDetails.forRent,
-          propertyDetails.forRent ? parseEther(propertyDetails.rentAmount) : 0n,
-          propertyDetails.forRent ? BigInt(propertyDetails.rentDuration) : 0n,
-          propertyDetails.acceptingBids
+          parseEther(listingForm.price),
+          listingForm.forSale,
+          listingForm.forRent,
+          listingForm.rentAmount ? parseEther(listingForm.rentAmount) : 0n,
+          BigInt(listingForm.rentDuration || '0'),
+          listingForm.acceptingBids
         ]
       });
 
-      const receipt = await publicClient.waitForTransactionReceipt({ 
-        hash: hash as `0x${string}` 
-      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-      console.log("First transaction receipt:", receipt);
-
-      // Get the property ID from the event
-      const propertyId = receipt?.logs[0]?.topics[1];
-      if (!propertyId) {
-        throw new Error("Failed to get property ID from transaction");
+      // Find the PropertyListed event and get the propertyId
+      if (receipt?.logs) {
+        console.log('Transaction logs:', receipt.logs);
+        
+        // Get the first log as it's likely our PropertyListed event
+        const event = receipt.logs[0];
+        if (event?.topics[1]) {
+          // The property ID should be in topics[1]
+          const hexString = event.topics[1].replace('0x', '');
+          const id = parseInt(hexString, 16);
+          console.log('Property ID:', id);
+          setPropertyId(id);
+        } else {
+          console.error('Property ID not found in event topics');
+          // Log the full event for debugging
+          console.log('Event details:', {
+            topics: event?.topics,
+            data: event?.data
+          });
+        }
+      } else {
+        console.error('No logs found in receipt');
       }
 
-      console.log("Setting property details with args:", {
-        propertyId: BigInt(parseInt(propertyId, 16)),
-        name: propertyDetails.name,
-        physicalAddress: propertyDetails.physicalAddress,
-        residenceType: propertyDetails.residenceType,
-        bedrooms: Number(propertyDetails.bedrooms),
-        bathrooms: Number(propertyDetails.bathrooms),
-        squareFeet: BigInt(propertyDetails.squareFeet),
-        yearBuilt: propertyDetails.yearBuilt,
-        keyFeatures: propertyDetails.keyFeatures.filter(f => f.trim() !== ""),
-        amenities: propertyDetails.amenities.filter(a => a.trim() !== ""),
-        description: propertyDetails.description
-      });
-
-      // Second transaction - set property details
-      const detailsReceipt = await publicClient.waitForTransactionReceipt({ 
-        hash: hash as `0x${string}` 
-      });
-      console.log("Second transaction receipt:", detailsReceipt);
-
-    } catch (err) {
-      console.error("Error listing property:", err);
-      setError(err instanceof Error ? err.message : String(err));
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
+    } catch (error) {
+      console.error('Error listing property:', error);
     }
   };
 
+  // Submit handler for setting property details
+  const handleSetDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!address || !propertyId) return;
+
+    try {
+      const hash = await setPropertyDetails({
+        address: CONTRACT_ADDRESS,
+          abi: CONTRACT_ABI,
+          functionName: 'setPropertyDetails',
+          args: [
+          BigInt(propertyId),
+          detailsForm.name,
+          detailsForm.physicalAddress,
+          detailsForm.residenceType,
+          parseInt(detailsForm.bedrooms),
+          parseInt(detailsForm.bathrooms),
+          BigInt(detailsForm.squareFeet),
+          BigInt(detailsForm.yearBuilt),
+          detailsForm.keyFeatures.split(','),
+          detailsForm.amenities.split(','),
+          detailsForm.description
+        ]
+      });
+
+      await publicClient.waitForTransactionReceipt({ hash });
+
+      // Reset forms after successful submission
+      setListingForm({
+        price: '',
+        forSale: true,
+        forRent: false,
+        rentAmount: '',
+        rentDuration: '',
+        acceptingBids: true
+      });
+      
+      setDetailsForm({
+        name: '',
+        physicalAddress: '',
+        residenceType: '',
+        bedrooms: '',
+        bathrooms: '',
+        squareFeet: '',
+        yearBuilt: '',
+        keyFeatures: '',
+        amenities: '',
+        description: ''
+      });
+
+      setPropertyId(null);
+
+      // Invalidate queries to refetch property list
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
+    } catch (error) {
+      console.error('Error setting property details:', error);
+    }
+  };
+
+  // Add this near the top of your component to debug
+  useEffect(() => {
+    console.log('Property ID changed:', propertyId);
+  }, [propertyId]);
+
   return (
-    <div className="bg-gray-900 min-h-screen text-white">
-      <div className="container mx-auto px-4 py-12">
-        <div className="max-w-3xl mx-auto">
-          <h1 className="text-4xl font-bold mb-8">List Your Property</h1>
-          
-          <form onSubmit={handleSubmit} className="space-y-8">
-            {/* Basic Information */}
-            <div className="bg-gray-800/50 p-6 rounded-xl space-y-6">
-              <h2 className="text-2xl font-semibold mb-4">Basic Information</h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Property Name</label>
-                  <input
-                    type="text"
-                    className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
-                    value={propertyDetails.name}
-                    onChange={(e) => setPropertyDetails(prev => ({...prev, name: e.target.value}))}
-                    required
+    <div className="container mx-auto p-4 space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>List Your Property</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleListProperty} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="price">Sale Price (ETH)</Label>
+              <Input
+                id="price"
+                name="price"
+                type="number"
+                step="0.001"
+                value={listingForm.price}
+                onChange={handleListingChange}
+                required={listingForm.forSale}
+              />
+            </div>
+
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="forSale"
+                  name="forSale"
+                  checked={listingForm.forSale}
+                  onCheckedChange={(checked) => 
+                    setListingForm(prev => ({ ...prev, forSale: checked }))
+                  }
+                />
+                <Label htmlFor="forSale">For Sale</Label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="forRent"
+                  name="forRent"
+                  checked={listingForm.forRent}
+                  onCheckedChange={(checked) => 
+                    setListingForm(prev => ({ ...prev, forRent: checked }))
+                  }
+                />
+                <Label htmlFor="forRent">For Rent</Label>
+              </div>
+            </div>
+
+            {listingForm.forRent && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="rentAmount">Rent Amount (ETH)</Label>
+                  <Input
+                    id="rentAmount"
+                    name="rentAmount"
+                    type="number"
+                    step="0.001"
+                    value={listingForm.rentAmount}
+                    onChange={handleListingChange}
+                    required={listingForm.forRent}
                   />
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium mb-2">Physical Address</label>
-                  <input
-                    type="text"
-                    className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
-                    value={propertyDetails.physicalAddress}
-                    onChange={(e) => setPropertyDetails(prev => ({...prev, physicalAddress: e.target.value}))}
-                    required
+                <div className="space-y-2">
+                  <Label htmlFor="rentDuration">Rent Duration (days)</Label>
+                  <Input
+                    id="rentDuration"
+                    name="rentDuration"
+                    type="number"
+                    value={listingForm.rentDuration}
+                    onChange={handleListingChange}
+                    required={listingForm.forRent}
                   />
                 </div>
+              </>
+            )}
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">Residence Type</label>
-                  <select
-                    className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
-                    value={propertyDetails.residenceType}
-                    onChange={(e) => setPropertyDetails(prev => ({...prev, residenceType: e.target.value}))}
-                    required
-                  >
-                    <option value="">Select Type</option>
-                    <option value="House">House</option>
-                    <option value="Apartment">Apartment</option>
-                    <option value="Condo">Condo</option>
-                    <option value="Townhouse">Townhouse</option>
-                  </select>
-                </div>
-              </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="acceptingBids"
+                name="acceptingBids"
+                checked={listingForm.acceptingBids}
+                onCheckedChange={(checked) => 
+                  setListingForm(prev => ({ ...prev, acceptingBids: checked }))
+                }
+              />
+              <Label htmlFor="acceptingBids">Accept Bids</Label>
             </div>
 
-            {/* Property Details */}
-            <div className="bg-gray-800/50 p-6 rounded-xl space-y-6">
-              <h2 className="text-2xl font-semibold mb-4">Property Details</h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Bedrooms</label>
-                  <input
-                    type="number"
-                    className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
-                    value={propertyDetails.bedrooms}
-                    onChange={(e) => setPropertyDetails(prev => ({...prev, bedrooms: e.target.value}))}
+            <Button type="submit" className="w-full">
+              List Property
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {propertyId !== null && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Set Property Details (ID: {propertyId})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSetDetails} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Property Name</Label>
+                <Input
+                  id="name"
+                  name="name"
+                  value={detailsForm.name}
+                  onChange={handleDetailsChange}
                     required
-                  />
+                />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">Bathrooms</label>
-                  <input
-                    type="number"
-                    className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
-                    value={propertyDetails.bathrooms}
-                    onChange={(e) => setPropertyDetails(prev => ({...prev, bathrooms: e.target.value}))}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">Square Feet</label>
-                  <input
-                    type="number"
-                    className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
-                    value={propertyDetails.squareFeet}
-                    onChange={(e) => setPropertyDetails(prev => ({...prev, squareFeet: e.target.value || ""}))}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">Year Built</label>
-                  <input
-                    type="number"
-                    className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
-                    value={Number(propertyDetails.yearBuilt)}
-                    onChange={(e) => setPropertyDetails(prev => ({
-                      ...prev, 
-                      yearBuilt: BigInt(e.target.value)
-                    }))}
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Property Description */}
-            <div className="bg-gray-800/50 p-6 rounded-xl space-y-6">
-              <h2 className="text-2xl font-semibold mb-4">Property Description</h2>
-              <div>
-                <label className="block text-sm font-medium mb-2">Description</label>
-                <textarea
-                  className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
-                  rows={4}
-                  value={propertyDetails.description}
-                  onChange={(e) => setPropertyDetails(prev => ({...prev, description: e.target.value}))}
+              <div className="space-y-2">
+                <Label htmlFor="physicalAddress">Physical Address</Label>
+                <Input
+                  id="physicalAddress"
+                  name="physicalAddress"
+                  value={detailsForm.physicalAddress}
+                  onChange={handleDetailsChange}
                   required
-                  placeholder="Describe your property..."
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="residenceType">Residence Type</Label>
+                <Input
+                  id="residenceType"
+                  name="residenceType"
+                  value={detailsForm.residenceType}
+                  onChange={handleDetailsChange}
+                  required
+                />
             </div>
 
-            {/* Key Features */}
-            <div className="bg-gray-800/50 p-6 rounded-xl space-y-6">
-              <h2 className="text-2xl font-semibold mb-4">Key Features</h2>
-              {propertyDetails.keyFeatures.map((feature, index) => (
-                <div key={index} className="flex gap-2">
-                  <input
-                    type="text"
-                    className="flex-1 bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
-                    value={feature}
-                    onChange={(e) => {
-                      const newFeatures = [...propertyDetails.keyFeatures];
-                      newFeatures[index] = e.target.value;
-                      setPropertyDetails(prev => ({...prev, keyFeatures: newFeatures}));
-                    }}
-                    placeholder="e.g., Swimming Pool, Garden, etc."
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="bedrooms">Bedrooms</Label>
+                  <Input
+                    id="bedrooms"
+                    name="bedrooms"
+                    type="number"
+                    value={detailsForm.bedrooms}
+                    onChange={handleDetailsChange}
+                    required
                   />
-                  {propertyDetails.keyFeatures.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newFeatures = propertyDetails.keyFeatures.filter((_, i) => i !== index);
-                        setPropertyDetails(prev => ({...prev, keyFeatures: newFeatures}));
-                      }}
-                      className="bg-red-500/20 hover:bg-red-500/30 text-red-500 p-2 rounded-lg transition-colors"
-                    >
-                      Remove
-                    </button>
-                  )}
                 </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setPropertyDetails(prev => ({
-                  ...prev,
-                  keyFeatures: [...prev.keyFeatures, ""]
-                }))}
-                className="bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-500 px-4 py-2 rounded-lg transition-colors"
-              >
-                Add Feature
-              </button>
-            </div>
 
-            {/* Amenities */}
-            <div className="bg-gray-800/50 p-6 rounded-xl space-y-6">
-              <h2 className="text-2xl font-semibold mb-4">Amenities</h2>
-              {propertyDetails.amenities.map((amenity, index) => (
-                <div key={index} className="flex gap-2">
-                  <input
-                    type="text"
-                    className="flex-1 bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
-                    value={amenity}
-                    onChange={(e) => {
-                      const newAmenities = [...propertyDetails.amenities];
-                      newAmenities[index] = e.target.value;
-                      setPropertyDetails(prev => ({...prev, amenities: newAmenities}));
-                    }}
-                    placeholder="e.g., Air Conditioning, Parking, etc."
+                <div className="space-y-2">
+                  <Label htmlFor="bathrooms">Bathrooms</Label>
+                  <Input
+                    id="bathrooms"
+                    name="bathrooms"
+                    type="number"
+                    value={detailsForm.bathrooms}
+                    onChange={handleDetailsChange}
+                    required
                   />
-                  {propertyDetails.amenities.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newAmenities = propertyDetails.amenities.filter((_, i) => i !== index);
-                        setPropertyDetails(prev => ({...prev, amenities: newAmenities}));
-                      }}
-                      className="bg-red-500/20 hover:bg-red-500/30 text-red-500 p-2 rounded-lg transition-colors"
-                    >
-                      Remove
-                    </button>
-                  )}
                 </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setPropertyDetails(prev => ({
-                  ...prev,
-                  amenities: [...prev.amenities, ""]
-                }))}
-                className="bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-500 px-4 py-2 rounded-lg transition-colors"
-              >
-                Add Amenity
-              </button>
+                </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="squareFeet">Square Feet</Label>
+                  <Input
+                    id="squareFeet"
+                    name="squareFeet"
+                    type="number"
+                    value={detailsForm.squareFeet}
+                    onChange={handleDetailsChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="yearBuilt">Year Built</Label>
+                  <Input
+                    id="yearBuilt"
+                    name="yearBuilt"
+                    type="number"
+                    value={detailsForm.yearBuilt}
+                    onChange={handleDetailsChange}
+                    required
+                  />
+              </div>
             </div>
 
-            {/* Listing Details */}
-            <div className="bg-gray-800/50 p-6 rounded-xl space-y-6">
-              <h2 className="text-2xl font-semibold mb-4">Listing Details</h2>
-              
-              <div className="space-y-6">
-                <div className="flex items-center gap-8">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={propertyDetails.forSale}
-                      onChange={(e) => setPropertyDetails(prev => ({...prev, forSale: e.target.checked}))}
-                      className="rounded bg-gray-700/50"
-                    />
-                    <span>For Sale</span>
-                  </label>
-                  
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={propertyDetails.forRent}
-                      onChange={(e) => setPropertyDetails(prev => ({...prev, forRent: e.target.checked}))}
-                      className="rounded bg-gray-700/50"
-                    />
-                    <span>For Rent</span>
-                  </label>
+              <div className="space-y-2">
+                <Label htmlFor="keyFeatures">Key Features (comma-separated)</Label>
+                <Input
+                  id="keyFeatures"
+                  name="keyFeatures"
+                  value={detailsForm.keyFeatures}
+                  onChange={handleDetailsChange}
+                  required
+                />
+              </div>
 
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={propertyDetails.acceptingBids}
-                      onChange={(e) => setPropertyDetails(prev => ({...prev, acceptingBids: e.target.checked}))}
-                      className="rounded bg-gray-700/50"
-                    />
-                    <span>Accept Bids</span>
-                  </label>
-                </div>
-
-                {propertyDetails.forSale && (
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Sale Price (ETH)</label>
-                    <input
-                      type="text"
-                      className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
-                      value={propertyDetails.price}
-                      onChange={(e) => setPropertyDetails(prev => ({...prev, price: e.target.value}))}
-                      required={propertyDetails.forSale}
-                    />
-                  </div>
-                )}
-
-                {propertyDetails.forRent && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Rent Amount (ETH/month)</label>
-                      <input
-                        type="text"
-                        className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
-                        value={propertyDetails.rentAmount}
-                        onChange={(e) => setPropertyDetails(prev => ({...prev, rentAmount: e.target.value}))}
-                        required={propertyDetails.forRent}
+              <div className="space-y-2">
+                <Label htmlFor="amenities">Amenities (comma-separated)</Label>
+                <Input
+                  id="amenities"
+                  name="amenities"
+                  value={detailsForm.amenities}
+                  onChange={handleDetailsChange}
+                  required
                       />
                     </div>
                     
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Rent Duration (months)</label>
-                      <input
-                        type="number"
-                        className="w-full bg-gray-700/50 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500"
-                        value={propertyDetails.rentDuration}
-                        onChange={(e) => setPropertyDetails(prev => ({...prev, rentDuration: e.target.value}))}
-                        required={propertyDetails.forRent}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  name="description"
+                  value={detailsForm.description}
+                  onChange={handleDetailsChange}
+                  required
+                />
             </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={isConfirming}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {isConfirming ? 'Confirming...' : 'List Property'}
-            </button>
-
-            {error && (
-              <div className="text-red-500 mt-4">
-                Error: {error}
-              </div>
-            )}
-
-            {isConfirmed && (
-              <div className="text-green-500 mt-4">
-                Property listed successfully!
-              </div>
-            )}
-          </form>
-        </div>
-      </div>
+              <Button type="submit" className="w-full">
+                Set Property Details
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 } 

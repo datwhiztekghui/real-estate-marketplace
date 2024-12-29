@@ -17,96 +17,31 @@ const PropertyDetailsPage: React.FC = () => {
     details: PropertyDetails;
   } | null>(null);
 
-  const { data: propertyDetails, isError, error } = useReadContract({
+  const { data: propertyDetails } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: 'getPropertyDetails',
     args: id ? [BigInt(id)] : undefined,
   });
 
-  // Add error handling
-  if (isError) {
-    console.error('Contract read error:', error);
-    return (
-      <div className="text-red-500 text-center py-8">
-        Error loading property details
-      </div>
-    );
-  }
-
   React.useEffect(() => {
     if (propertyDetails) {
+      const [listingArray, detailsArray] = propertyDetails as unknown as [PropertyListing, PropertyDetails];
+      
       try {
-        const [listing, details] = propertyDetails as readonly [any, any];
-        console.log('Raw listing data:', listing);
-        console.log('Raw details data:', details);
-
-        // Add validation checks
-        if (!listing || !details) {
-          console.error('Missing listing or details data');
-          return;
-        }
-
-        const parsedProperty = {
-          listing: {
-            owner: listing[0] as `0x${string}`,
-            price: BigInt(listing[1]?.toString() || '0'),
-            forSale: Boolean(listing[2]),
-            forRent: Boolean(listing[3]),
-            rentAmount: BigInt(listing[4]?.toString() || '0'),
-            rentDuration: BigInt(listing[5]?.toString() || '0'),
-            acceptingBids: Boolean(listing[6]),
-            isInspected: Boolean(listing[7]),
-            inspectionRating: Number(listing[8] || 0),
-            isSold: Boolean(listing[9]),
-            isRented: Boolean(listing[10])
-          },
-          details: {
-            name: String(details[0] || ''),
-            physicalAddress: String(details[1] || ''),
-            residenceType: String(details[2] || ''),
-            bedrooms: Number(details[3] || 0),
-            bathrooms: Number(details[4] || 0),
-            squareFeet: BigInt(details[5]?.toString() || '0'),
-            yearBuilt: BigInt(details[6]?.toString() || '0'),
-            keyFeatures: Array.isArray(details[7]) ? details[7] : [],
-            amenities: Array.isArray(details[8]) ? details[8] : [],
-            description: String(details[9] || '')
-          }
-        };
-
-        console.log('Parsed property:', parsedProperty);
-        setProperty(parsedProperty);
+        setProperty({
+          listing: listingArray,
+          details: detailsArray
+        });
       } catch (error) {
-        console.error('Error parsing property details:', error);
+        console.error('Error parsing property data:', error);
       }
     }
   }, [propertyDetails]);
 
-  console.log('Property Details:', propertyDetails);
-  console.log('Parsed Property:', property);
-
   const handleBidPlacement = async () => {
     // Add logic to handle bid placement
   };
-
-  if (!propertyDetails) {
-    console.log('No property details available');
-    return (
-      <div className="flex justify-center items-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-      </div>
-    );
-  }
-
-  if (!property) {
-    console.log('Property details not parsed yet');
-    return (
-      <div className="flex justify-center items-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-      </div>
-    );
-  }
 
   return (
     <div className="container mx-auto py-8">

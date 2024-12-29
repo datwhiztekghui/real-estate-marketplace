@@ -1,4 +1,4 @@
-# NFT Marketplace
+# Real Estate Marketplace
 
 ## 🎉 Features
 
@@ -24,13 +24,13 @@ Follow these steps to get started with the react-vite-ui template:
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/amaitari/nft-marketplace.git
+   git clone https://github.com/datwhiztekghui/real-estate-marketplace.git
    ```
 
 2. Navigate to the project directory:
 
    ```bash
-   cd nft-marketplace
+   cd real-estate-marketplace
    ```
 
 3. Install the dependencies:

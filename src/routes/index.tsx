@@ -235,7 +235,7 @@ export function Index() {
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {featuredProperties.map((property) => (
-            <div key={property.id} className="bg-white rounded-lg shadow-lg overflow-hidden">
+            <div key={property.id} className="bg-indigo-900 rounded-lg shadow-lg overflow-hidden">
               {/* Property Card */}
               <div className="p-6">
                 <h2 className="text-xl font-semibold mb-2">{property.details.name}</h2>
@@ -244,7 +244,7 @@ export function Index() {
                 {/* Rating Stars */}
                 <div className="flex items-center mb-4">
                   {[...Array(property.listing.inspectionRating)].map((_, i) => (
-                    <StarIcon key={i} className="w-5 h-5 text-yellow-400 fill-current" />
+                    <StarIcon key={i} className="w-4 h-4 text-amber-500 fill-current" />
                   ))}
                 </div>
                 
@@ -253,7 +253,7 @@ export function Index() {
                   <div className="flex items-center">
                     <BedDoubleIcon className="w-5 h-5 mr-1" />
                     <span>{property.details.bedrooms} beds</span>
-                  </div>
+                  </div>  
                   <div className="flex items-center">
                     <BathIcon className="w-5 h-5 mr-1" />
                     <span>{property.details.bathrooms} baths</span>
@@ -273,7 +273,7 @@ export function Index() {
                 <Link
                   to="/property/$id"
                   params={{ id: property.id.toString() }}
-                  className="block w-full text-center bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                  className="block w-fit text-center bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   View Details
                 </Link>

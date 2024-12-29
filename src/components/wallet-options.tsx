@@ -1,137 +1,119 @@
-import { useConnect, useAccount, useDisconnect } from "wagmi";
-import { injected, metaMask, walletConnect, coinbaseWallet } from 'wagmi/connectors'
-import { useState } from 'react';
-import metamaskIcon from '@/assets/metamask_icon.png';
-import coinbaseIcon from '@/assets/coinbase_icon.png';
+import { useAccount, useConnect, useDisconnect } from 'wagmi'
+import { Button } from './ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
+import { Copy } from 'lucide-react'
+import { toast } from "@/hooks/use-toast"
 
-// Define supported wallets configuration
-const SUPPORTED_WALLETS = [
-  {
-    id: "metamask",
-    name: "MetaMask",
-    connector: () => metaMask(),
-    icon: <img src={metamaskIcon} alt="MetaMask" className="w-6 h-6" />
-  },
-  {
-    id: "coinbase",
-    name: "Coinbase Wallet",
-    connector: () => coinbaseWallet(),
-    // icon: "📱"
-    icon: <img src={coinbaseIcon} alt="Coinbase Wallet" className="w-6 h-6" />
-  },
-  {
-    id: "walletconnect",
-    name: "WalletConnect",
-    connector: () => walletConnect({ projectId: 'YOUR_PROJECT_ID' }),
-    icon: "🔗"
-  },
-  {
-    id: "injected",
-    name: "Browser Wallet",
-    connector: () => injected(),
-    icon: "💳"
-  }
-];
+interface WalletOptionsProps {
+  isOpen: boolean
+  onClose: () => void
+}
 
-export function WalletOptions() {
-  const { connect, error } = useConnect();
-  const { address, isConnected } = useAccount();
-  const { disconnect } = useDisconnect();
-  const [loadingWalletId, setLoadingWalletId] = useState<string | null>(null);
-  const [showDropdown, setShowDropdown] = useState(false);
+export function WalletOptions({ isOpen, onClose }: WalletOptionsProps) {
+  const { address, connector: activeConnector } = useAccount()
+  const { connect, connectors, error, isLoading, pendingConnector } = useConnect()
+  const { disconnect } = useDisconnect()
 
-  const handleConnect = (walletId: string, connector: () => any) => {
-    if (isConnected) {
-      setShowDropdown(!showDropdown);
-      return;
-    }
-    setLoadingWalletId(walletId);
-    connect({ connector: connector() });
-    setLoadingWalletId(null);
-  };
-
-  const handleCopyAddress = () => {
+  // Function to copy address to clipboard
+  const copyAddress = () => {
     if (address) {
-      navigator.clipboard.writeText(address);
-      setShowDropdown(false);
+      navigator.clipboard.writeText(address)
+      toast({
+        title: "Success",
+        description: "Address copied to clipboard",
+      })
     }
-  };
+  }
 
+  // Function to format address for display
   const formatAddress = (addr: string) => {
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  };
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+  }
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="text-center mb-6">
-        <h3 className="text-2xl font-bold text-gray-900">
-          {isConnected ? 'Connected Wallet' : 'Connect Wallet'}
-        </h3>
-        <p className="text-gray-500 mt-2">
-          {isConnected 
-            ? 'Manage your wallet connection'
-            : 'Choose your preferred wallet provider'}
-        </p>
-      </div>
-      
-      <div className="space-y-3 relative">
-        {SUPPORTED_WALLETS.map((wallet) => (
-          <button
-            key={wallet.id}
-            onClick={() => handleConnect(wallet.id, wallet.connector)}
-            className={`
-              w-full px-6 py-4 
-              ${isConnected ? 'bg-indigo-50' : 'bg-gray-100 hover:bg-indigo-400'}
-              border-2 border-indigo-200 rounded-xl
-              flex items-center justify-between
-              transition-colors duration-200
-              ${loadingWalletId === wallet.id && 'animate-pulse'}
-            `}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 flex items-center justify-center bg-gray-100 rounded-lg">
-                <span className="text-xl">{wallet.icon}</span>
-              </div>
-              <div className="text-left">
-                <p className="font-semibold text-gray-950">
-                  {isConnected ? formatAddress(address!) : wallet.name}
-                </p>
-              </div>
-            </div>
-            {loadingWalletId === wallet.id && (
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900" />
-            )}
-          </button>
-        ))}
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[425px] bg-slate-900 text-white">
+        <DialogHeader>
+          <DialogTitle>Wallet Options</DialogTitle>
+        </DialogHeader>
 
-        {/* Dropdown Menu */}
-        {showDropdown && isConnected && (
-          <div className="absolute w-full mt-2 py-2 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-            <button
-              onClick={handleCopyAddress}
-              className="w-full px-4 py-2 text-left hover:bg-gray-100"
-            >
-              Copy Address
-            </button>
-            <button
+        {address ? (
+          <div className="space-y-4">
+            {/* Current Account */}
+            <div className="p-4 bg-slate-800 rounded-lg">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-gray-400">Connected Account</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={copyAddress}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-sm font-mono">{formatAddress(address)}</p>
+            </div>
+
+            {/* Account Switching Section */}
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">Switch Account</h3>
+              {connectors
+                .filter((x) => x.ready && x.id !== activeConnector?.id)
+                .map((connector) => (
+                  <Button
+                    key={connector.id}
+                    variant="outline"
+                    className="w-full justify-start text-left"
+                    onClick={() => {
+                      disconnect()
+                      connect({ connector })
+                    }}
+                    disabled={isLoading && connector.id === pendingConnector?.id}
+                  >
+                    {connector.name}
+                    {isLoading && connector.id === pendingConnector?.id && ' (connecting)'}
+                  </Button>
+                ))}
+            </div>
+
+            {/* Disconnect Button */}
+            <Button
+              variant="destructive"
+              className="w-full"
               onClick={() => {
-                disconnect();
-                setShowDropdown(false);
+                disconnect()
+                onClose()
               }}
-              className="w-full px-4 py-2 text-left text-red-600 hover:bg-gray-100"
             >
-             Disconnect {formatAddress(address!)}
-            </button>
+              Disconnect {activeConnector?.name}
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {connectors.map((connector) => (
+              <Button
+                key={connector.id}
+                variant="outline"
+                className="w-full justify-start text-left"
+                onClick={() => connect({ connector })}
+                disabled={!connector.ready || isLoading && connector.id === pendingConnector?.id}
+              >
+                {connector.name}
+                {isLoading && connector.id === pendingConnector?.id && ' (connecting)'}
+                {!connector.ready && ' (unsupported)'}
+              </Button>
+            ))}
           </div>
         )}
-      </div>
 
-      {error && (
-        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-sm text-red-600">{error.message}</p>
-        </div>
-      )}
-    </div>
-  );
+        {error && (
+          <div className="text-red-500 text-sm mt-2">
+            {error.message}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
 }
 

@@ -1,288 +1,417 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useReadContract } from "wagmi";
-import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../constants";
-import { formatEther } from "viem";
-import { Link } from "@tanstack/react-router";
-import { ArrowLeftIcon, ArrowRightIcon } from "lucide-react";
-import { useMemo } from 'react';
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { useReadContract, useWriteContract, useAccount, useTransaction } from 'wagmi'
+import { StarIcon, BedDoubleIcon, School, LandPlot, BathIcon, HomeIcon, Building2Icon, BarChart3Icon, Brain, MapPin } from "lucide-react";
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../constants'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { useState, useEffect } from 'react'
 
+// Define types for property data
 interface PropertyListing {
-  owner: `0x${string}`;
-  price: bigint;
-  forSale: boolean;
-  forRent: boolean;
-  rentAmount: bigint;
-  rentDuration: bigint;
-  acceptingBids: boolean;
-  isInspected: boolean;
-  inspectionRating: number;
-  isSold: boolean;
-  isRented: boolean;
+  owner: `0x${string}`
+  price: bigint
+  forSale: boolean
+  forRent: boolean
+  rentAmount: bigint
+  rentDuration: bigint
+  acceptingBids: boolean
+  isInspected: boolean
+  inspectionRating: number
+  isSold: boolean
+  isRented: boolean
 }
 
 interface PropertyDetails {
-  name: string;
-  physicalAddress: string;
-  residenceType: string;
-  bedrooms: number;
-  bathrooms: number;
-  squareFeet: bigint;
-  yearBuilt: bigint;
-  keyFeatures: readonly string[];
-  amenities: readonly string[];
-  description: string;
+  name: string
+  physicalAddress: string
+  residenceType: string
+  bedrooms: number
+  bathrooms: number
+  squareFeet: bigint
+  yearBuilt: bigint
+  keyFeatures: readonly string[]
+  amenities: readonly string[]
+  description: string
 }
 
-interface Property {
-  id: bigint;
-  listing: PropertyListing;
-  details: PropertyDetails;
+interface InspectionDialogProps {
+  isOpen: boolean
+  onClose: () => void
+  onSubmit: (rating: number, passed: boolean) => void
 }
 
-export const Route = createFileRoute('/browse')({
-  component: BrowseProperties
-});
+// Inspection Dialog Component
+function InspectionDialog({ isOpen, onClose, onSubmit }: InspectionDialogProps) {
+  const [rating, setRating] = useState<number>(1)
+  const [passed, setPassed] = useState<boolean>(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-function BrowseProperties() {
-  // Read all properties from the contract
-  const { data: propertiesCount, isLoading: isLoadingCount } = useReadContract({
-    address: CONTRACT_ADDRESS as `0x${string}`,
-    abi: CONTRACT_ABI,
-    functionName: 'propertyCounter'
-  });
-
-  const { data: properties, isLoading: isLoadingProperties } = useReadContract({
-    address: CONTRACT_ADDRESS as `0x${string}`,
-    abi: CONTRACT_ABI,
-    functionName: 'getAllProperties'
-  });
-
-  // Convert properties to the correct type and handle undefined
-  const propertyList: Property[] = useMemo(() => {
-    if (!properties || !Array.isArray(properties[0]) || !Array.isArray(properties[1])) {
-      return [];
+  const handleSubmit = async () => {
+    // Validate rating
+    if (rating < 1 || rating > 10) {
+      alert('Rating must be between 1 and 10')
+      return
     }
-
-    return properties[0].map((listing: any, index) => {
-      try {
-        const details = properties[1][index] as any;
-        return {
-          id: BigInt(index + 1),
-          listing: {
-            owner: listing[0] as `0x${string}`,
-            price: BigInt(listing[1]?.toString() || '0'),
-            forSale: Boolean(listing[2]),
-            forRent: Boolean(listing[3]),
-            rentAmount: BigInt(listing[4]?.toString() || '0'),
-            rentDuration: BigInt(listing[5]?.toString() || '0'),
-            acceptingBids: Boolean(listing[6]),
-            isInspected: Boolean(listing[7]),
-            inspectionRating: Number(listing[8] || 0),
-            isSold: Boolean(listing[9]),
-            isRented: Boolean(listing[10])
-          },
-          details: {
-            name: String(details[0] || ''),
-            physicalAddress: String(details[1] || ''),
-            residenceType: String(details[2] || ''),
-            bedrooms: Number(details[3] || 0),
-            bathrooms: Number(details[4] || 0),
-            squareFeet: BigInt(details[5]?.toString() || '0'),
-            yearBuilt: BigInt(details[6]?.toString() || '0'),
-            keyFeatures: Array.isArray(details[7]) ? details[7] : [],
-            amenities: Array.isArray(details[8]) ? details[8] : [],
-            description: String(details[9] || '')
-          }
-        };
-      } catch (error) {
-        console.error('Error parsing property:', error);
-        return null;
-      }
-    }).filter(Boolean) as Property[];
-  }, [properties]);
-
-  // Helper function to get property category and description
-  const getPropertyCategory = (property: Property) => {
-    if (!property?.details?.physicalAddress) {
-      return {
-        category: "Other Properties",
-        description: "A unique property waiting to be discovered..."
-      };
-    }
-
-    const address = property.details.physicalAddress.toLowerCase();
     
-    if (address.includes('beach') || address.includes('coast')) {
-      return {
-        category: "Coastal Escapes - Where Waves Beckon",
-        description: "Wake up to the soothing melody of waves. This beachfront villa offers..."
-      };
-    } else if (property.details.residenceType === "Apartment") {
-      return {
-        category: "Urban Oasis - Life in the Heart of the City",
-        description: "Immerse yourself in the energy of the city. This modern apartment in the heart..."
-      };
-    } else {
-      return {
-        category: "Countryside Charm - Escape to Nature's Embrace",
-        description: "Find tranquility in the countryside. This charming property is nestled amidst rolling hills..."
-      };
+    setIsSubmitting(true)
+    try {
+      await onSubmit(rating, passed)
+    } catch (error) {
+      console.error('Submission error:', error)
+    } finally {
+      setIsSubmitting(false)
     }
-  };
-
-  // Function to get default image based on property type
-  const getPropertyImage = (propertyType: string | undefined) => {
-    if (!propertyType) return '/default-property.jpg';
-    
-    switch (propertyType.toLowerCase()) {
-      case 'house':
-        return '/modern-house.jpg';
-      case 'apartment':
-        return '/modern-apartment.jpg';
-      case 'villa':
-        return '/luxury-villa.jpg';
-      default:
-        return '/default-property.jpg';
-    }
-  };
-
-  // Add loading check in the return
-  if (isLoadingCount || isLoadingProperties) {
-    return (
-      <div className="bg-gray-900 min-h-screen text-white px-4 py-8">
-        <div className="max-w-7xl mx-auto text-center">
-          <p>Loading properties...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Add error check for properties data
-  if (!properties) {
-    return (
-      <div className="bg-gray-900 min-h-screen text-white px-4 py-8">
-        <div className="max-w-7xl mx-auto text-center">
-          <p>Loading properties...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (propertyList.length === 0) {
-    return (
-      <div className="bg-gray-900 min-h-screen text-white px-4 py-8">
-        <div className="max-w-7xl mx-auto text-center">
-          <p>No properties found</p>
-        </div>
-      </div>
-    );
   }
 
   return (
-    <div className="bg-gray-900 min-h-screen text-white px-4 py-8">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-4xl font-bold mb-4">Discover a World of Possibilities</h1>
-        <p className="text-gray-400 mb-8">
-          Our portfolio of properties is as diverse as your dreams. Explore the following categories to find the perfect property that resonates with your vision of home.
-        </p>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[425px] bg-[url('../src/assets/Modal2_bg.png')] bg-no-repeat bg-cover border border-propstakeIndigoHover rounded-2xl shadow-2xl z-50">
+        <DialogHeader>
+          <DialogTitle>Property Inspection</DialogTitle>
+          <p className="text-sm text-gray-300">
+            Rate this property according to your inspection.
+          </p>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label htmlFor="rating">Rating (1-10)</Label>
+            <Input
+              id="rating"
+              type="number"
+              min="1"
+              max="10"
+              value={rating}
+              onChange={(e) => setRating(Number(e.target.value))}
+            />
+          </div>
+          <div className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              id="passed"
+              checked={passed}
+              onChange={(e) => setPassed(e.target.checked)}
+              className="rounded border-gray-300 text-propstakeIndigoHover focus:ring-propstakeIndigoHover"
+            />
+            <Label htmlFor="passed">Pass Inspection</Label>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button 
+            type="button" 
+            variant="secondary" 
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSubmit}
+            className="bg-propstakeIndigoHover hover:bg-propstakeIndigoHover"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Submitting...' : 'Submit Rating'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {propertyList.map((property) => {
-            const { category, description } = getPropertyCategory(property);
+export const Route = createFileRoute('/browse')({
+  component: BrowseProperties,
+})
+
+function BrowseProperties() {
+  const { address } = useAccount()
+  const [inspectionDialog, setInspectionDialog] = useState({
+    isOpen: false,
+    propertyId: 0,
+  })
+  const [pendingTx, setPendingTx] = useState<string | null>(null)
+  const [showMoreStates, setShowMoreStates] = useState<{ [key: number]: boolean }>({});
+
+  // Add useWaitForTransaction hook to monitor transaction status
+  const { isSuccess: isTxSuccess } = useTransaction({
+    hash: pendingTx as `0x${string}`,
+  })
+
+  // Modify the read contract call to enable refresh
+  const { data: propertiesData, refetch: refetchProperties } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'getAllProperties',
+  })
+
+  // Watch for successful transactions and refresh data
+  useEffect(() => {
+    if (isTxSuccess && pendingTx) {
+      refetchProperties()
+      setPendingTx(null)
+    }
+  }, [isTxSuccess, pendingTx])
+
+  const { data: inspectorData } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'getInspectorDetails',
+    args: [address ?? '0x0'],
+  })
+  const isInspector = inspectorData?.[0] ?? false
+
+  // Contract write function for inspection
+  const { writeContract } = useWriteContract()
+
+  const [listings, details] = propertiesData || [[], []]
+
+  const formatPrice = (price: bigint): string => {
+    return `${Number(price) / 1e18} ETH`
+  }
+
+  const handleInspectionSubmit = async (rating: number, passed: boolean) => {
+    try {
+      if (!writeContract) {
+        console.error('Write contract not available')
+        return
+      }
+
+      const hash = await writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: CONTRACT_ABI,
+        functionName: 'inspectProperty',
+        args: [BigInt(inspectionDialog.propertyId), rating, passed],
+      })
+
+      console.log('Transaction submitted:', hash)
+      setPendingTx(hash)
+      setInspectionDialog({ isOpen: false, propertyId: 0 })
+
+      } catch (error) {
+      console.error('Error submitting inspection:', error)
+      alert('Failed to submit inspection. Please try again.')
+    }
+  }
+
+  return (
+    <div className="container mx-auto p-6">
+      <h1 className="text-2xl font-bold mb-6">Browse Properties</h1>
+
+        <div className="w-512 h-692 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {listings &&
+          details &&
+          listings.map((listing: PropertyListing, index: number) => {
+            const detail: PropertyDetails = details[index]
+            if (!detail.name) return null
+
+            const isPending = pendingTx && inspectionDialog.propertyId === index + 1
+
             return (
-              <div key={property.id.toString()} className="bg-gray-800/50 rounded-xl overflow-hidden">
-                <div className="h-48 bg-gray-700 relative overflow-hidden">
-                  <img 
-                    src={getPropertyImage(property.details.residenceType)}
-                    alt={property.details.name}
+              <Card
+                key={index}
+                className="overflow-hidden bg-rgb(20,20,20,1) text-white"
+              >
+                <div className="w-full h-58 bg-slate-800 relative">
+                  {isInspector && (
+                    <button
+                      onClick={() => setInspectionDialog({ 
+                        isOpen: true, 
+                        propertyId: index + 1 
+                      })}
+                      disabled={listing.isInspected || isPending}
+                      className={`absolute top-20 right-4 px-1.5 py-2 rounded-md z-10 ${
+                        listing.isInspected 
+                          ? 'bg-green-600 cursor-default'
+                          : isPending
+                          ? 'bg-yellow-600 cursor-wait'
+                          : 'bg-red-600 hover:bg-red-700'
+                      } text-white`}
+                    >
+                      {listing.isInspected 
+                        ? <img src="../src/assets/home_inspection.png" alt="Inspect Property" className="w-10 h-10" />
+                        : isPending
+                        ? 'Processing...'
+                        : <img src="../src/assets/home_inspection.png" alt="Inspect Property" className="w-10 h-10" />
+                      }
+                    </button>
+                  )}
+                  <img
+                    src="../src/assets/home_1.jpg"
+                    alt={detail.name}
                     className="w-full h-full object-cover"
                   />
+                  
+                  {listing.forSale && (
+                    <span className="absolute top-4 right-4 border-2 border-collapse border-r-2">
+                      {listing.isSold ? (
+                        <img src="../src/assets/sold-out.gif" alt="Sold" className="w-12 h-12" />
+                      ) : (
+                        <img src="../src/assets/for-sale.gif" alt="For Sale" className="w-12 h-12" />
+                      )}
+                    </span>
+                  )}
+                  
+                  {listing.forRent && (
+                    <span className="absolute top-4 right-4 border-2 border-collapse border-r-2">
+                      {listing.isRented ? (
+                        <img src="../src/assets/rented.gif" alt="Rented" className="w-12 h-12" />
+                      ) : (
+                        <img src="../src/assets/rent.gif" alt="For Rent" className="w-12 h-12" />
+                      )}
+                    </span>
+                  )}
                 </div>
                 
-                <div className="p-6">
-                  <div className="text-sm text-gray-400 mb-2">{category}</div>
-                  <h2 className="text-xl font-semibold mb-2">{property.details.name}</h2>
-                  <p className="text-gray-400 text-sm mb-4 line-clamp-2">{description}</p>
+                <CardContent className="p-4">
+                <div className="mb-4">
+                    <h3 className="text-xl font-semibold text-purple-300">
+                      {detail.name || 'Other Properties'}
+                    </h3>
+                    <p className="flex items-center text-sm text-purple-300 ">
+                        <MapPin className="w-4 h-4 mr-2 text-gray-300"/>
+                        <span className="text-white">{detail.physicalAddress}</span>
+                       {' '}
+                      </p>
+        
+                    <p className="text-sm text-gray-300 mt-2">
+                      {showMoreStates[index] 
+                        ? detail.description 
+                        : detail.description.slice(0, 100).concat('...')}
+                      <span 
+                        className="text-sm text-purple-300 cursor-pointer ml-2" 
+                        onClick={() => setShowMoreStates(prev => ({
+                          ...prev, 
+                          [index]: !prev[index]
+                        }))}
+                      >
+                        {showMoreStates[index] ? 'Show less' : 'Read more'}
+                      </span>
+                    </p>
 
-                  {/* Property Details */}
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-400">Bedrooms:</span>
-                      <span>{property.details.bedrooms}</span>
+                    
+       
+
+                  </div>
+
+                  <div className="grid grid-flow-row-2 gap-2">
+                    <div className="flex flex-col-3 sm:flex-col-1 gap-4">
+
+                      <p className="flex items-center text-sm text-gray-300 border-2 w-fit h-fit  border-collapse border-r-20 bg-slate-700 rounded-md">
+                        <BedDoubleIcon className="w-5 h-5 mr-1"/>
+                        <span className="text-white">{detail.bedrooms}-</span>
+                        Bedrooms{' '}
+                      </p>
+
+                      
+                      <p className="flex items-center text-sm text-gray-300 border-2 w-fit h-fit border-r-20 bg-slate-700 rounded-md">
+                        <BathIcon className="w-5 h-5 mr-1"/>
+                        <span className="text-white">{detail.bathrooms}-</span>
+                        Bathrooms {' '}
+                      </p>
+
+                      <p className="flex items-center text-sm text-gray-300 border-2 w-fit h-fit  border-collapse border-r-20 bg-slate-700 rounded-md">
+                        <LandPlot className="w-5 h-5 mr-1"/>
+                        <span className="text-white">{detail.squareFeet.toString()}-</span>
+                        sq-ft {' '}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-400">Bathrooms:</span>
-                      <span>{property.details.bathrooms}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-400">Area:</span>
-                      <span>{property.details.squareFeet.toString()} sq ft</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-400">Type:</span>
-                      <span>{property.details.residenceType}</span>
+                    
+                    <div className="flex flex-col-2 mt-2 gap-4">
+                    <p className="flex items-center text-sm text-gray-300 mb-2">
+                        <School className="w-5 h-5 mr-1"/>
+                        <span className="text-white">{detail.residenceType}-</span>
+                        Category {' '}
+                      </p>
+
+                      <p className="text-sm text-gray-300">
+                        Year Built:{' '}
+                        <span className="text-white">
+                          {detail.yearBuilt.toString()}
+                        </span>
+                      </p>
                     </div>
                   </div>
 
-                  {/* Price and Action */}
+                  <div className="flex justify-between flex-cols-3 mt-2 space-y-1">
+                  {(listing.isInspected || isPending) && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-sm text-gray-300">
+                        Inspection Status: {' '} 
+                        <span className={`${
+                          isPending ? 'text-yellow-400' : 'text-purple-300'
+                        }`}>
+                          {isPending ? 'Processing...' : 'Completed'}
+                        </span>
+                      </p>
+                      {listing.isInspected && (
+                        <>
+                          <p className="text-sm text-gray-300">
+                            Rating:{' '}
+                            <span className="text-indigo-400">
+                              {listing.inspectionRating}/5
+                            </span>
+                          </p>
+                          <p className="text-sm text-gray-300">
+                            Status:{' '}
+                            <span className={`${
+                              listing.isInspected ? 'text-indigo-400' : 'text-red-400'
+                            }`}>
+                              {listing.isInspected ? 'Passed' : 'Failed'}
+                            </span>
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  </div>
                   <div className="flex justify-between items-center">
                     <div>
-                      <div className="text-sm text-gray-400">Price</div>
-                      <div className="text-lg font-semibold">
-                        {property.listing.forSale 
-                          ? `${formatEther(property.listing.price)} ETH`
-                          : `${formatEther(property.listing.rentAmount)} ETH/month`}
-                      </div>
+                      <p className="text-3xl font-bold ">
+                        {listing.forRent
+                          ? formatPrice(listing.rentAmount)
+                          : formatPrice(listing.price)}
+                      </p>
                     </div>
-
                     <Link
-                      to="/property/$id"
-                      params={{ id: property.id.toString() }}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors"
+                      to={`/property/${index + 1}`}
+                      className="w-fit"
+                    >
+                      <Button
+                        variant="default"
+                        className="w-fit bg-propstakeIndigoHover hover:bg-purple-500 text-gray-200 border-gray-200"
                     >
                       View Details
+                      </Button>
                     </Link>
                   </div>
 
-                  {/* Status Tags */}
-                  <div className="flex gap-2 mt-4">
-                    {property.listing.forSale && (
-                      <span className="bg-green-500/20 text-green-500 px-2 py-1 rounded text-sm">
-                        For Sale
-                      </span>
-                    )}
-                    {property.listing.forRent && (
-                      <span className="bg-blue-500/20 text-blue-500 px-2 py-1 rounded text-sm">
-                        For Rent
-                      </span>
-                    )}
-                    {property.listing.acceptingBids && (
-                      <span className="bg-purple-500/20 text-purple-500 px-2 py-1 rounded text-sm">
-                        Accepting Bids
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
+
+                </CardContent>
+              </Card>
+            )
           })}
         </div>
 
-        <div className="mt-8 flex justify-between items-center">
-          <div className="text-gray-400">
-            {propertyList.length} of {propertiesCount?.toString() || '0'}
-          </div>
-          
-          <div className="flex gap-2">
-            <button className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors">
-              <ArrowLeftIcon className="w-6 h-6" />
-            </button>
-            <button className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors">
-              <ArrowRightIcon className="w-6 h-6" />
-            </button>
-          </div>
+      <InspectionDialog
+        isOpen={inspectionDialog.isOpen}
+        onClose={() => setInspectionDialog({ isOpen: false, propertyId: 0 })}
+        onSubmit={handleInspectionSubmit}
+      />
+
+      {(!listings || listings.length === 0) && (
+        <div className="text-center py-12">
+          <p className="text-gray-500">No properties listed yet.</p>
         </div>
-      </div>
+      )}
     </div>
-  );
+  )
 }
+
+export default BrowseProperties

@@ -1,49 +1,113 @@
 import React from 'react';
 import { Link } from '@tanstack/react-router';
+import { formatEther } from 'viem';
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../constants/index';
 import { useReadContract } from 'wagmi';
-import { PropertyDetails, PropertyListing } from '../types';
 import { ConnectWallet } from '@/components/connect-wallet'; 
 import { ModeToggle } from '@/components/mode-toggle';
-import { readContract } from '@wagmi/core'
-import { config } from '@/lib/wagmi'
-import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../constants';
-
-
 
 const PropertyListPage: React.FC = () => {
-  const [properties, setProperties] = React.useState<
-    Array<{ id: string; listing: PropertyListing; details: PropertyDetails }>
-  >([]);
-
-  const { data: propertyCount } = useReadContract({
-    address: CONTRACT_ADDRESS,
+  // Read all properties from the contract
+  const { data: propertiesCount } = useReadContract({
+    address: CONTRACT_ADDRESS as `0x${string}`,
     abi: CONTRACT_ABI,
     functionName: 'propertyCounter',
+    watch: true
   });
 
-  React.useEffect(() => {
-    const fetchProperties = async () => {
-      const count = propertyCount ? Number(propertyCount.toString()) : 0;
-      const propertyList = await Promise.all(
-        Array.from({ length: count }, (_, i) =>
-          getPropertyDetails(i + 1)
-        )
-      );
-      setProperties(propertyList);
-    };
-    fetchProperties();
-  }, [propertyCount]);
+  console.log('Properties count:', propertiesCount?.toString());
 
-  const getPropertyDetails = async (id: number) => {
-    const data = await readContract(config, {
-      address: CONTRACT_ADDRESS,
+  const { data: propertiesData } = useReadContract({
+    address: CONTRACT_ADDRESS as `0x${string}`,
       abi: CONTRACT_ABI,
-      functionName: 'getPropertyDetails',
-      args: [BigInt(id)],
-    });
-    const [listing, details] = data || [];
-    return { id: id.toString(), listing, details };
+    functionName: 'getAllProperties',
+    watch: true
+  });
+
+  console.log('Raw properties data:', propertiesData);
+
+  // Convert properties to the correct type and handle undefined
+  const propertyList = React.useMemo(() => {
+    if (!propertiesData) {
+      console.log('No properties data available');
+      return [];
+    }
+
+    const [listings, details] = propertiesData as [any[], any[]];
+    console.log('Parsed data:', { listings, details });
+
+    if (!Array.isArray(listings) || !Array.isArray(details)) {
+      console.log('Invalid data structure');
+      return [];
+    }
+
+    return listings.map((listing: any, index) => {
+      try {
+        const detail = details[index];
+        if (!listing || !detail) {
+          console.log(`Missing data for property ${index}`);
+          return null;
+        }
+
+        return {
+          id: (index + 1).toString(),
+          listing: {
+            owner: listing[0],
+            price: BigInt(listing[1]?.toString() || '0'),
+            forSale: Boolean(listing[2]),
+            forRent: Boolean(listing[3]),
+            rentAmount: BigInt(listing[4]?.toString() || '0'),
+            rentDuration: BigInt(listing[5]?.toString() || '0'),
+            acceptingBids: Boolean(listing[6]),
+            isInspected: Boolean(listing[7]),
+            inspectionRating: Number(listing[8] || 0),
+            isSold: Boolean(listing[9]),
+            isRented: Boolean(listing[10])
+          },
+          details: {
+            name: String(detail[0] || ''),
+            physicalAddress: String(detail[1] || ''),
+            residenceType: String(detail[2] || ''),
+            bedrooms: Number(detail[3] || 0),
+            bathrooms: Number(detail[4] || 0),
+            squareFeet: BigInt(detail[5]?.toString() || '0'),
+            yearBuilt: BigInt(detail[6]?.toString() || '0'),
+            keyFeatures: Array.isArray(detail[7]) ? [...detail[7]] : [],
+            amenities: Array.isArray(detail[8]) ? [...detail[8]] : [],
+            description: String(detail[9] || '')
+          }
+        };
+      } catch (error) {
+        console.error('Error parsing property:', error);
+        console.error('Property data:', { listing, detail: details[index] });
+        return null;
+      }
+    }).filter(Boolean);
+  }, [propertiesData]);
+
+  // Function to get default image based on property type
+  const getPropertyImage = (propertyType: string | undefined) => {
+    if (!propertyType) return '/default-property.jpg';
+    
+    switch (propertyType.toLowerCase()) {
+      case 'house':
+        return '/modern-house.jpg';
+      case 'apartment':
+        return '/modern-apartment.jpg';
+      case 'villa':
+        return '/luxury-villa.jpg';
+      default:
+        return '/default-property.jpg';
+    }
   };
+
+  if (!propertyList || propertyList.length === 0) {
+    return (
+      <div className="container mx-auto py-8">
+        <p>No properties available.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto py-8">
@@ -55,7 +119,7 @@ const PropertyListPage: React.FC = () => {
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {properties.map((property) => (
+        {propertyList.map((property) => property && (
           <Link
             key={property.id}
             to={`/property/${property.id}`}
@@ -64,7 +128,7 @@ const PropertyListPage: React.FC = () => {
             <img
               src={getPropertyImage(property.details.residenceType)}
               alt={property.details.name}
-              className="w-full h-64 object-cover"
+              className="w-full h-68 object-cover"
             />
             <div className="p-6">
               <div className="mb-4">
@@ -96,7 +160,7 @@ const PropertyListPage: React.FC = () => {
                       : `${formatEther(property.listing.rentAmount)} ETH/month`}
                   </p>
                 </div>
-                <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors">
+                <button className="w-fit bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors">
                   View Details
                 </button>
               </div>
